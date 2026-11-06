@@ -1,0 +1,21 @@
+/build
+
+# Kotlin compiler cache (you have a .kotlin folder)
+.kotlin/
+
+# Remaining IDE files (safer to ignore the whole folder)
+.idea/
+
+# Signing / secrets — never push these
+*.jks
+*.keystore
+keystore.properties
+google-services.json
+
+# Build outputs
+*.apk
+*.aab
+**/build/
+
+# Logs
+*.log

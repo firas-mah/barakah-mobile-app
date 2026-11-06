@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Crescent icon used in the status bar for notifications -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M14.5,2.5C9.25,2.5 5,6.75 5,12s4.25,9.5 9.5,9.5c1.6,0 3.1,-0.4 4.4,-1.1C15.6,19.6 13.2,16.1 13.2,12s2.4,-7.6 5.7,-8.4C17.6,2.9 16.1,2.5 14.5,2.5z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M19,8.2l0.7,1.5 1.6,0.2 -1.2,1.1 0.3,1.6 -1.4,-0.8 -1.4,0.8 0.3,-1.6 -1.2,-1.1 1.6,-0.2z" />
+</vector>
