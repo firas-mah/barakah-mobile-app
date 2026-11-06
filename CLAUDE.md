@@ -27,6 +27,7 @@ Not a git repository yet. `local.properties` is machine-specific (SDK path).
 | `prayer/PrayerCalculator.kt` | Offline astronomical prayer times (PrayTimes.org method). `Prayer` enum, `PrayerConfig`. Per-prayer minute adjustments match the official Tunisian calendar. |
 | `schedule/ScheduleEngine.kt` | Core logic: template + date → list of concrete `Block`s. |
 | `schedule/DefaultTemplate.kt` | The default week (ordered list of `BlockTemplate`). |
+| `progress/Progress.kt` | Pure monthly/quarterly/yearly progress: `PeriodKey`, `Metric` (financial, technical, business, deen), `stats`, `lines` (vs previous period + best, medals 🥉🥈🥇), `suggestTarget`, money summary (TND, USD converted). |
 | `data/Store.kt` | Persistence: SharedPreferences `"barakah"` holding JSON strings. |
 | `coach/Coach.kt` | Daily tips (rotating by epoch day), per-block notification messages, milestones, indie warnings, day notes. |
 | `coach/Reminders.kt` | Ayah/hadith pool grouped by `Act`; `forBlock`/`pick` choose one deterministically. |
@@ -61,7 +62,7 @@ Key derived rules:
 
 ## Persistence
 
-`Store` keys: `settings`, `templates`, `done`, `logs`, `products`, `metric_<name>` (`mrr`, `followers`), `alarm_count`. All JSON via `org.json` with `opt*` defaults, so adding a field to a model means: add default in the data class, read with a default in `load*`, write in `save*`. Corrupt/missing data falls back to defaults (`runCatching`). Templates are stored whole once edited; `resetTemplates()` returns to `DefaultTemplate`.
+`Store` keys: `settings`, `templates`, `done`, `logs`, `products` (projects: kind, market, revenue model, next step, deadline), `money` (ledger of `MoneyEntry`), `goals`, `metric_<name>` (`mrr`, `followers`), `alarm_count`. All JSON via `org.json` with `opt*` defaults, so adding a field to a model means: add default in the data class, read with a default in `load*`, write in `save*`. Corrupt/missing data falls back to defaults (`runCatching`). Templates are stored whole once edited; `resetTemplates()` returns to `DefaultTemplate`.
 
 ## UI conventions
 
@@ -74,8 +75,8 @@ Key derived rules:
 
 - **Today**: next-prayer countdown, "now" card, timeline with check-off, ONE-thing focus, daily tip.
 - **Track**: daily log — Quran pages, posts, sport, sadaqa, wins/notes, X (Twitter) growth counters (`XTrackCard`: replies, builder follows, conversations, followers).
-- **Indie**: products (status, MRR, users, URL), milestones, neglect warnings.
-- **Stats**: prayer/day/category scores, streaks, weekly X stats.
+- **Projects** (`Tab.INDIE`, `IndieScreen.kt`): client apps / own products (status pipeline incl. Delivered → Standardizing → For sale), money ledger (income/expenses per month, TND base, USD via `Settings.usdToTnd`), source share, milestones, warnings (deadline, no income, >60% from one source).
+- **Stats**: Week (prayer/day/category scores, streaks, weekly X stats) · Month/Year scoreboard ("lines crossed" vs previous period, medals), goals with suggested harder targets, net-profit-by-month chart. Values are computed from logs only; a metric with no data is "not logged", never 0.
 - **Settings**: city + prayer angles/adjustments, mosque times, bedtime/friends/sleep, notifications, week-template editor.
 
 ## Known gaps / things to watch

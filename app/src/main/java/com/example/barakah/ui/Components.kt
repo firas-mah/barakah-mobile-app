@@ -18,6 +18,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -26,6 +27,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.barakah.model.CurrencyCode
+import com.example.barakah.progress.Progress
 import java.time.Duration
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -58,6 +61,48 @@ fun countdown(from: LocalDateTime, to: LocalDateTime): String {
 fun money(v: Double): String =
     if (v % 1.0 == 0.0) "$" + String.format(Locale.US, "%,d", v.toLong())
     else "$" + String.format(Locale.US, "%,.2f", v)
+
+/** "1,250 TND" (decimals only when needed). */
+fun tnd(v: Double): String {
+    val r = Math.round(v * 100) / 100.0
+    return (if (r % 1.0 == 0.0) String.format(Locale.US, "%,d", r.toLong())
+    else String.format(Locale.US, "%,.2f", r)) + " TND"
+}
+
+fun amount(v: Double, currency: CurrencyCode): String = when (currency) {
+    CurrencyCode.TND -> tnd(v)
+    CurrencyCode.USD -> money(v)
+}
+
+/** A metric value in its unit: "1,250 TND", "12.5 h", "34", "+12". */
+fun metricValue(metric: Progress.Metric, v: Double): String = when (metric.unit) {
+    Progress.Unit.TND -> tnd(v)
+    Progress.Unit.HOURS -> if (v % 1.0 == 0.0) "${v.toLong()} h" else String.format(Locale.US, "%.1f h", v)
+    Progress.Unit.COUNT -> String.format(Locale.US, "%,d", Math.round(v))
+    Progress.Unit.SIGNED -> (if (v > 0) "+" else "") + String.format(Locale.US, "%,d", Math.round(v))
+}
+
+/** Parses "yyyy-MM-dd", or null. */
+fun parseDay(s: String): java.time.LocalDate? = runCatching { java.time.LocalDate.parse(s.trim()) }.getOrNull()
+
+/** "‹  November 2026  ›". [canNext] false hides moving into the future. */
+@Composable
+fun PeriodSwitcher(
+    label: String, onPrev: () -> Unit, onNext: () -> Unit, canNext: Boolean,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        TextButton(onClick = onPrev) { Text("‹", fontSize = 22.sp) }
+        Text(
+            label, Modifier.weight(1f), fontWeight = FontWeight.SemiBold, fontSize = 16.sp,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+        )
+        TextButton(onClick = onNext, enabled = canNext) { Text("›", fontSize = 22.sp) }
+    }
+}
 
 @Composable
 fun ScreenTitle(title: String, subtitle: String? = null) {
@@ -148,4 +193,24 @@ fun StatTile(label: String, value: String, modifier: Modifier = Modifier, accent
             Text(label, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
+}
+
+/** A wrapping row of single-choice chips. */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+fun <T> ChipRow(options: List<T>, selected: T, label: (T) -> String, onSelect: (T) -> Unit) {
+    androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        options.forEach { o ->
+            androidx.compose.material3.FilterChip(
+                selected = o == selected, onClick = { onSelect(o) },
+                label = { Text(label(o)) }
+            )
+        }
+    }
+}
+
+/** Small grey caption under a row or a field. */
+@Composable
+fun Caption(text: String, color: Color = MaterialTheme.colorScheme.onSurfaceVariant) {
+    Text(text, fontSize = 12.sp, color = color)
 }

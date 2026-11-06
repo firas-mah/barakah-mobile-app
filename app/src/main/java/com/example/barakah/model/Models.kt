@@ -142,7 +142,10 @@ data class Settings(
     val jumuahArriveMin: Int = 20,
 
     /** Add a matching ayah or hadith to every reminder. */
-    val faithReminders: Boolean = true
+    val faithReminders: Boolean = true,
+
+    /** Manual exchange rate (the app stays offline): 1 USD = this many TND. */
+    val usdToTnd: Double = 3.0
 ) {
     fun prayerConfig() = PrayerConfig(
         latitude = latitude, longitude = longitude, zoneId = zoneId,
@@ -175,19 +178,95 @@ data class DailyLog(
 )
 
 enum class ProductStatus(val label: String, val emoji: String) {
-    IDEA("Idea", "💡"), BUILDING("Building", "🔨"), LAUNCHED("Launched", "🚀"),
+    IDEA("Idea", "💡"), BUILDING("Building", "🔨"),
+    /** Client app handed over to the client. */
+    DELIVERED("Delivered", "📦"),
+    /** Turning a client app into a generic product others can buy. */
+    STANDARDIZING("Standardizing", "🧩"),
+    LAUNCHED("Launched", "🚀"),
+    /** Standardized product offered to other customers (license / sale). */
+    FOR_SALE("For sale", "🏷️"),
     PROFITABLE("Profitable", "💰"), KILLED("Killed", "🪦");
 
-    val shipped: Boolean get() = this == LAUNCHED || this == PROFITABLE || this == KILLED
+    val shipped: Boolean
+        get() = this == DELIVERED || this == LAUNCHED || this == FOR_SALE || this == PROFITABLE || this == KILLED
 }
+
+/** Who the project is built for. */
+enum class ProjectKind(val label: String, val emoji: String) {
+    CLIENT_APP("Client app", "🤝"),
+    OWN_PRODUCT("Own product", "🚀")
+}
+
+enum class Market(val label: String) {
+    PRIVATE_CLIENT("Private client"),
+    TUNISIA_B2B("Tunisia B2B"),
+    WORLD("Worldwide")
+}
+
+enum class RevenueModel(val label: String) {
+    NONE("Not decided"), ONE_OFF("One-off"), SUBSCRIPTION("Subscription"), LICENSE("License"),
+    ADS("Ads"), IAP("In-app purchase"), MAINTENANCE("Maintenance")
+}
+
+/** Money is shown in TND; USD amounts are converted with Settings.usdToTnd. */
+enum class CurrencyCode { TND, USD }
 
 data class Product(
     val id: String,
     val name: String,
     val status: ProductStatus = ProductStatus.IDEA,
+    /** Expected recurring revenue per month, in [mrrCurrency]. Real money goes in the ledger. */
     val mrr: Double = 0.0,
     val users: Int = 0,
     val url: String = "",
-    /** yyyy-MM-dd of the day it was first launched (set automatically). */
-    val launchedOn: String = ""
+    /** yyyy-MM-dd of the day it was first launched / delivered (set automatically). */
+    val launchedOn: String = "",
+    val kind: ProjectKind = ProjectKind.OWN_PRODUCT,
+    val market: Market = Market.WORLD,
+    val revenueModel: RevenueModel = RevenueModel.NONE,
+    /** Older versions stored MRR in dollars. */
+    val mrrCurrency: CurrencyCode = CurrencyCode.USD,
+    /** The very next concrete step for this project. */
+    val nextStep: String = "",
+    /** yyyy-MM-dd, or blank. */
+    val deadline: String = ""
+)
+
+enum class MoneyType(val label: String, val emoji: String) {
+    CLIENT_PAYMENT("Client payment", "🤝"),
+    SALE("Sale", "🏷️"),
+    SUBSCRIPTION("Subscriptions", "🔁"),
+    LICENSE("License", "📜"),
+    ADS("Ads", "📺"),
+    MAINTENANCE("Maintenance", "🛠️"),
+    EXPENSE("Expense", "💸");
+
+    val isExpense: Boolean get() = this == EXPENSE
+}
+
+/** One real payment received or money spent. The ledger is the source of truth for income. */
+data class MoneyEntry(
+    val id: String,
+    /** yyyy-MM-dd */
+    val date: String,
+    /** Product id, or blank for "general" (not tied to a project). */
+    val projectId: String = "",
+    /** Always positive; [type] says if it's an expense. */
+    val amount: Double,
+    val currency: CurrencyCode = CurrencyCode.TND,
+    val type: MoneyType = MoneyType.CLIENT_PAYMENT,
+    val note: String = ""
+)
+
+/**
+ * A target for one metric over a period: "2026-11" (month), "2026-Q4" (quarter) or "2026" (year).
+ * The achieved value is always computed from what you logged, never typed.
+ */
+data class Goal(
+    val id: String,
+    val period: String,
+    /** Name of a progress.Metric. */
+    val metric: String,
+    val target: Double
 )

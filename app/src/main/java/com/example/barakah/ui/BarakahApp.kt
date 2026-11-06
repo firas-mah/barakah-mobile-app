@@ -19,7 +19,7 @@ import androidx.compose.ui.unit.sp
 enum class Tab(val label: String, val emoji: String) {
     TODAY("Today", "🕰️"),
     TRACK("Track", "✅"),
-    INDIE("Indie", "🚀"),
+    INDIE("Projects", "🚀"),
     STATS("Stats", "📊"),
     SETTINGS("Settings", "⚙️")
 }

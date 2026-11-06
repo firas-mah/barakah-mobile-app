@@ -5,15 +5,19 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
+import com.example.barakah.coach.Coach
 import com.example.barakah.data.Store
 import com.example.barakah.model.Block
 import com.example.barakah.model.BlockTemplate
 import com.example.barakah.model.Category
 import com.example.barakah.model.DailyLog
+import com.example.barakah.model.Goal
 import com.example.barakah.model.Kind
+import com.example.barakah.model.MoneyEntry
 import com.example.barakah.model.Product
 import com.example.barakah.model.Settings
 import com.example.barakah.notify.AlarmScheduler
+import com.example.barakah.progress.Progress
 import com.example.barakah.schedule.DefaultTemplate
 import com.example.barakah.schedule.ScheduleEngine
 import java.time.LocalDate
@@ -37,6 +41,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     var mrrHistory by mutableStateOf(store.loadMetric("mrr"))
         private set
     var followersHistory by mutableStateOf(store.loadMetric("followers"))
+        private set
+    var money by mutableStateOf(store.loadMoney())
+        private set
+    var goals by mutableStateOf(store.loadGoals())
         private set
 
     /** Bumped whenever the plan changes, so screens rebuild their timeline. */
@@ -128,7 +136,49 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     // ───────── Products & money ─────────
-    val totalMrr: Double get() = products.sumOf { it.mrr }
+    /** Expected recurring revenue of all projects, in TND. */
+    val totalMrrTnd: Double
+        get() = products.sumOf { Progress.toTnd(it.mrr, it.mrrCurrency, settings.usdToTnd) }
+
+    fun toTnd(m: MoneyEntry): Double = Progress.toTnd(m, settings.usdToTnd)
+
+    fun saveMoney(entry: MoneyEntry) {
+        money = if (money.any { it.id == entry.id }) money.map { if (it.id == entry.id) entry else it }
+        else money + entry
+        store.saveMoney(money)
+    }
+
+    fun deleteMoney(id: String) {
+        money = money.filterNot { it.id == id }
+        store.saveMoney(money)
+    }
+
+    fun newId(): String = UUID.randomUUID().toString()
+
+    /** Revenue, expenses and income per project between two dates (inclusive), in TND. */
+    fun moneySummary(from: LocalDate, to: LocalDate): Progress.MoneySummary =
+        Progress.money(progressInputs(), from, to)
+
+    /** Lifetime money facts for milestones: total revenue, best month net, most sources in a month. */
+    fun moneyFacts(): Coach.MoneyFacts {
+        val inputs = progressInputs()
+        val start = inputs.moneyStart ?: return Coach.MoneyFacts()
+        val last = Progress.PeriodKey.of(Progress.PeriodType.MONTH, today())
+        var p = Progress.PeriodKey.of(Progress.PeriodType.MONTH, start)
+        var revenue = 0.0
+        var bestNet = 0.0
+        var maxSources = 0
+        while (!p.start.isAfter(last.start)) {
+            val m = Progress.money(inputs, p.start, p.end)
+            revenue += m.revenue
+            bestNet = maxOf(bestNet, m.net)
+            maxSources = maxOf(maxSources, m.sources)
+            p = p.next()
+        }
+        return Coach.MoneyFacts(revenue, bestNet, maxSources)
+    }
+
+    fun projectName(id: String): String = products.firstOrNull { it.id == id }?.name ?: "General"
 
     fun saveProduct(input: Product) {
         // Remember the day a product is first launched (used for "ship regularly" warnings).
@@ -145,10 +195,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         recordMrr()
     }
 
-    fun newProductId(): String = UUID.randomUUID().toString()
+    fun newProductId(): String = newId()
 
     private fun recordMrr() {
-        mrrHistory = mrrHistory + (today().toString() to totalMrr)
+        mrrHistory = mrrHistory + (today().toString() to totalMrrTnd)
         store.saveMetric("mrr", mrrHistory)
     }
 
@@ -252,4 +302,54 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun categoryDoneAtLeastOnce(date: LocalDate, category: Category): Boolean =
         blocksFor(date).any { it.category == category && it.checkable && isDone(date, it.templateId) }
+
+    // ───────── Monthly progress & goals ─────────
+    private var factsKey: Any? = null
+    private var factsCache: Map<LocalDate, Progress.DayFacts> = emptyMap()
+
+    /** Facts for every day where something was checked. Rebuilt only when checks or the plan change. */
+    private fun dayFacts(): Map<LocalDate, Progress.DayFacts> {
+        val key = completions to planVersion
+        if (key == factsKey) return factsCache
+        val growth = setOf(Category.GROW, Category.BRAND)
+        factsCache = completions.mapNotNull { (k, ids) ->
+            if (ids.isEmpty()) return@mapNotNull null
+            val date = runCatching { LocalDate.parse(k) }.getOrNull() ?: return@mapNotNull null
+            val done = blocksFor(date).filter { it.checkable && it.templateId in ids }
+            date to Progress.DayFacts(
+                buildMin = done.filter { it.category == Category.BUILD }.sumOf { it.minutes }.toInt(),
+                growthMin = done.filter { it.category in growth }.sumOf { it.minutes }.toInt(),
+                built = done.any { it.category == Category.BUILD },
+                allPrayers = allPrayersDone(date)
+            )
+        }.toMap()
+        factsKey = key
+        return factsCache
+    }
+
+    /** Changes whenever anything progress depends on changes. Use as a `remember` key. */
+    val progressKey: Any
+        get() = listOf(money, products, logs, followersHistory, completions, planVersion, settings.usdToTnd, today())
+
+    fun progressInputs(): Progress.Inputs = Progress.Inputs(
+        money = money, usdToTnd = settings.usdToTnd, products = products, logs = logs,
+        followers = followersHistory, days = dayFacts(), today = today()
+    )
+
+    fun saveGoal(goal: Goal) {
+        goals = if (goals.any { it.id == goal.id }) goals.map { if (it.id == goal.id) goal else it }
+        else goals + goal
+        store.saveGoals(goals)
+    }
+
+    fun deleteGoal(id: String) {
+        goals = goals.filterNot { it.id == id }
+        store.saveGoals(goals)
+    }
+
+    /** Goals whose period overlaps [period] (e.g. for a month: that month, its quarter and its year). */
+    fun goalsCovering(period: Progress.PeriodKey): List<Pair<Goal, Progress.PeriodKey>> =
+        goals.mapNotNull { g -> Progress.PeriodKey.parse(g.period)?.let { g to it } }
+            .filter { (_, p) -> !p.end.isBefore(period.start) && !p.start.isAfter(period.end) }
+            .sortedBy { (_, p) -> p.type.ordinal }
 }

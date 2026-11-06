@@ -4,6 +4,7 @@ import com.example.barakah.model.Block
 import com.example.barakah.model.Category
 import com.example.barakah.model.Kind
 import com.example.barakah.model.Product
+import com.example.barakah.model.ProductStatus
 import java.time.DayOfWeek
 import java.time.LocalDate
 
@@ -83,35 +84,60 @@ object Coach {
     // ───────── Milestones ─────────
     data class Milestone(val emoji: String, val title: String, val reached: Boolean)
 
-    fun milestones(products: List<Product>, followers: Int): List<Milestone> {
-        val mrr = products.sumOf { it.mrr }
+    /** Lifetime money facts from the ledger, in TND. */
+    data class MoneyFacts(
+        val lifetimeRevenue: Double = 0.0,
+        val bestMonthNet: Double = 0.0,
+        val maxSourcesInMonth: Int = 0
+    )
+
+    fun milestones(products: List<Product>, followers: Int, m: MoneyFacts): List<Milestone> {
         val shipped = products.count { it.status.shipped }
         val users = products.sumOf { it.users }
         return listOf(
-            Milestone("💡", "Write down your first product idea", products.isNotEmpty()),
-            Milestone("🚀", "Launch your first product", shipped >= 1),
+            Milestone("💡", "Write down your first project", products.isNotEmpty()),
+            Milestone("🚀", "Ship or deliver your first project", shipped >= 1),
+            Milestone("💵", "Receive your first payment", m.lifetimeRevenue > 0),
             Milestone("👤", "Get your first user", users >= 1),
-            Milestone("💵", "Make your first dollar", mrr > 0),
+            Milestone("🔀", "2 income sources in one month", m.maxSourcesInMonth >= 2),
             Milestone("📣", "Reach 100 followers", followers >= 100),
-            Milestone("🔁", "Ship 3 products", shipped >= 3),
-            Milestone("💯", "\$100 MRR", mrr >= 100),
+            Milestone("🏅", "A month with 1,000 TND net", m.bestMonthNet >= 1000),
+            Milestone("🔁", "Ship 3 projects", shipped >= 3),
+            Milestone("🏷️", "Put a standardized app up for sale", products.any { it.status == ProductStatus.FOR_SALE }),
+            Milestone("🌍", "3 income sources in one month", m.maxSourcesInMonth >= 3),
+            Milestone("💯", "A month with 3,000 TND net", m.bestMonthNet >= 3000),
             Milestone("🧑‍🤝‍🧑", "100 users", users >= 100),
             Milestone("📣", "Reach 1,000 followers", followers >= 1000),
-            Milestone("🏆", "\$1,000 MRR", mrr >= 1000),
-            Milestone("🔟", "Ship 10 products", shipped >= 10),
-            Milestone("🌙", "\$10,000 MRR — financial freedom", mrr >= 10000)
+            Milestone("🏆", "A month with 10,000 TND net", m.bestMonthNet >= 10000),
+            Milestone("🔟", "Ship 10 projects", shipped >= 10),
+            Milestone("🌙", "A month with 30,000 TND net — financial freedom", m.bestMonthNet >= 30000)
         )
     }
 
-    /** A warning shown on the Indie screen when something important is being neglected. */
-    fun indieWarning(products: List<Product>, today: LocalDate): String? {
-        if (products.isEmpty()) return "You have no product yet. Pick the smallest idea you can launch in 14 days."
+    /**
+     * A warning shown on the Projects screen when something important is being neglected.
+     * [topSource] = name and share (0..1) of this month's biggest income source.
+     */
+    fun indieWarning(
+        products: List<Product>,
+        today: LocalDate,
+        hasIncome: Boolean,
+        topSource: Pair<String, Double>?
+    ): String? {
+        if (products.isEmpty()) return "You have no project yet. Pick the smallest idea you can ship in 14 days."
+        val late = products.firstOrNull { p ->
+            !p.status.shipped && p.status != ProductStatus.KILLED &&
+                runCatching { LocalDate.parse(p.deadline) }.getOrNull()?.isBefore(today) == true
+        }
         val launches = products.mapNotNull { runCatching { LocalDate.parse(it.launchedOn) }.getOrNull() }
         val last = launches.maxOrNull()
         return when {
-            last == null -> "Nothing launched yet. Set a launch date for your current product and post it on X."
+            late != null -> "“${late.name}” passed its deadline (${late.deadline}). Ship a smaller version or set an honest new date."
+            last == null -> "Nothing shipped yet. Set a deadline for your current project and tell someone about it."
             last.isBefore(today.minusDays(45)) -> "Your last launch was over 45 days ago. Ship something this month — even a small tool."
-            products.none { it.mrr > 0 } && products.any { it.status.shipped } -> "You've launched but no revenue yet. Add a price, or talk to 5 users this week."
+            !hasIncome && products.any { it.status.shipped } -> "You've shipped but no payment logged yet. Add a price, or talk to 5 users this week."
+            topSource != null && topSource.second > 0.6 ->
+                "${(topSource.second * 100).toInt()}% of this month's income comes from ${topSource.first}. Grow a second source."
             else -> null
         }
     }

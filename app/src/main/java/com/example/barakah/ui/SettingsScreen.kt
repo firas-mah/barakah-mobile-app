@@ -181,6 +181,18 @@ fun SettingsScreen(vm: AppViewModel) {
             )
         }
 
+        // ── Money ──
+        SectionCard(title = "💰 MONEY") {
+            Stepper("1 USD =", String.format(java.util.Locale.US, "%.2f TND", s.usdToTnd),
+                onMinus = { vm.updateSettings { it.copy(usdToTnd = (Math.round((it.usdToTnd - 0.05) * 100) / 100.0).coerceAtLeast(0.5)) } },
+                onPlus = { vm.updateSettings { it.copy(usdToTnd = (Math.round((it.usdToTnd + 0.05) * 100) / 100.0).coerceAtMost(10.0)) } })
+            Text(
+                "All totals are in TND. Dollar income (Play Store, global sales) is converted with this rate — " +
+                    "the app stays offline, so update it yourself from time to time.",
+                fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
         // ── Notifications ──
         SectionCard(title = "🔔 NOTIFICATIONS") {
             ToggleRow("Remind me when each block starts", s.notificationsEnabled) { v ->

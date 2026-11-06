@@ -5,10 +5,17 @@ import com.example.barakah.model.Anchor
 import com.example.barakah.model.BlockTemplate
 import com.example.barakah.model.Category
 import com.example.barakah.model.DailyLog
+import com.example.barakah.model.CurrencyCode
 import com.example.barakah.model.DhuhrMode
+import com.example.barakah.model.Goal
 import com.example.barakah.model.Kind
+import com.example.barakah.model.Market
+import com.example.barakah.model.MoneyEntry
+import com.example.barakah.model.MoneyType
 import com.example.barakah.model.Product
 import com.example.barakah.model.ProductStatus
+import com.example.barakah.model.ProjectKind
+import com.example.barakah.model.RevenueModel
 import com.example.barakah.model.Settings
 import com.example.barakah.prayer.Prayer
 import com.example.barakah.schedule.DefaultTemplate
@@ -55,7 +62,8 @@ class Store(context: Context) {
                 jumuahMin = o.optInt("jumuahMin", d.jumuahMin),
                 mosqueArriveMin = o.optInt("mosqueArriveMin", d.mosqueArriveMin),
                 jumuahArriveMin = o.optInt("jumuahArriveMin", d.jumuahArriveMin),
-                faithReminders = o.optBoolean("faithReminders", d.faithReminders)
+                faithReminders = o.optBoolean("faithReminders", d.faithReminders),
+                usdToTnd = o.optDouble("usdToTnd", d.usdToTnd)
             )
         }.getOrDefault(Settings())
     }
@@ -80,6 +88,7 @@ class Store(context: Context) {
             .put("mosqueArriveMin", s.mosqueArriveMin)
             .put("jumuahArriveMin", s.jumuahArriveMin)
             .put("faithReminders", s.faithReminders)
+            .put("usdToTnd", s.usdToTnd)
         prefs.edit().putString(K_SETTINGS, o.toString()).apply()
     }
 
@@ -184,7 +193,14 @@ class Store(context: Context) {
                 mrr = o.optDouble("mrr", 0.0),
                 users = o.optInt("users"),
                 url = o.optString("url"),
-                launchedOn = o.optString("launchedOn")
+                launchedOn = o.optString("launchedOn"),
+                kind = enumOr(o.optString("kind"), ProjectKind.OWN_PRODUCT),
+                market = enumOr(o.optString("market"), Market.WORLD),
+                revenueModel = enumOr(o.optString("revenueModel"), RevenueModel.NONE),
+                // Older versions stored MRR in dollars.
+                mrrCurrency = enumOr(o.optString("mrrCurrency"), CurrencyCode.USD),
+                nextStep = o.optString("nextStep"),
+                deadline = o.optString("deadline")
             )
         }
     }
@@ -196,9 +212,62 @@ class Store(context: Context) {
                 JSONObject().put("id", p.id).put("name", p.name).put("status", p.status.name)
                     .put("mrr", p.mrr).put("users", p.users).put("url", p.url)
                     .put("launchedOn", p.launchedOn)
+                    .put("kind", p.kind.name).put("market", p.market.name)
+                    .put("revenueModel", p.revenueModel.name).put("mrrCurrency", p.mrrCurrency.name)
+                    .put("nextStep", p.nextStep).put("deadline", p.deadline)
             )
         }
         prefs.edit().putString(K_PRODUCTS, arr.toString()).apply()
+    }
+
+    // ───────── Money ledger ─────────
+    fun loadMoney(): List<MoneyEntry> = runCatching {
+        val arr = JSONArray(prefs.getString(K_MONEY, "[]") ?: "[]")
+        (0 until arr.length()).mapNotNull { i ->
+            val o = arr.getJSONObject(i)
+            runCatching {
+                MoneyEntry(
+                    id = o.getString("id"),
+                    date = o.getString("date"),
+                    projectId = o.optString("projectId"),
+                    amount = o.getDouble("amount"),
+                    currency = enumOr(o.optString("currency"), CurrencyCode.TND),
+                    type = enumOr(o.optString("type"), MoneyType.CLIENT_PAYMENT),
+                    note = o.optString("note")
+                )
+            }.getOrNull()
+        }
+    }.getOrDefault(emptyList())
+
+    fun saveMoney(list: List<MoneyEntry>) {
+        val arr = JSONArray()
+        list.forEach { m ->
+            arr.put(
+                JSONObject().put("id", m.id).put("date", m.date).put("projectId", m.projectId)
+                    .put("amount", m.amount).put("currency", m.currency.name)
+                    .put("type", m.type.name).put("note", m.note)
+            )
+        }
+        prefs.edit().putString(K_MONEY, arr.toString()).apply()
+    }
+
+    // ───────── Goals ─────────
+    fun loadGoals(): List<Goal> = runCatching {
+        val arr = JSONArray(prefs.getString(K_GOALS, "[]") ?: "[]")
+        (0 until arr.length()).mapNotNull { i ->
+            val o = arr.getJSONObject(i)
+            runCatching {
+                Goal(o.getString("id"), o.getString("period"), o.getString("metric"), o.getDouble("target"))
+            }.getOrNull()
+        }
+    }.getOrDefault(emptyList())
+
+    fun saveGoals(list: List<Goal>) {
+        val arr = JSONArray()
+        list.forEach { g ->
+            arr.put(JSONObject().put("id", g.id).put("period", g.period).put("metric", g.metric).put("target", g.target))
+        }
+        prefs.edit().putString(K_GOALS, arr.toString()).apply()
     }
 
     // ───────── Metric history (e.g. "mrr", "followers"): date -> value ─────────
@@ -226,5 +295,10 @@ class Store(context: Context) {
         private const val K_PRODUCTS = "products"
         private const val K_METRIC = "metric_"
         private const val K_ALARMS = "alarm_count"
+        private const val K_MONEY = "money"
+        private const val K_GOALS = "goals"
+
+        private inline fun <reified E : Enum<E>> enumOr(name: String, default: E): E =
+            runCatching { enumValueOf<E>(name) }.getOrDefault(default)
     }
 }
